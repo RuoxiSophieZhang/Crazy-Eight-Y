@@ -1,483 +1,406 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CardData, Suit, Turn, GameStatus } from './types';
-import { createDeck, canPlayCard, getSuitSymbol, getSuitColor, SUITS } from './utils/gameLogic';
-import { Trophy, RotateCcw, Info, Hand, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  BookOpen, 
+  CheckCircle2, 
+  XCircle, 
+  ChevronRight, 
+  RotateCcw, 
+  Info, 
+  Trophy,
+  Filter,
+  GraduationCap,
+  ExternalLink
+} from 'lucide-react';
+import { Question, Difficulty, Category } from './types/grammar';
+import { QUESTIONS } from './data/questions';
 
-const Card = ({ 
-  card, 
-  onClick, 
-  isFaceUp = true, 
-  isPlayable = false, 
-  className = "",
-  rotate = 0,
-  extraY = 0,
-  index = 0,
-  useNegativeMargin = false,
-  key
-}: { 
-  card: CardData; 
-  onClick?: () => void; 
-  isFaceUp?: boolean; 
-  isPlayable?: boolean;
-  className?: string;
-  rotate?: number;
-  extraY?: number;
-  index?: number;
-  useNegativeMargin?: boolean;
-  key?: string | number;
-}) => {
-  return (
-    <motion.div
-      initial={{ scale: 0.9, opacity: 0, y: 20 }}
-      animate={{ 
-        scale: 1, 
-        opacity: 1, 
-        y: extraY,
-        rotate: rotate,
-      }}
-      exit={{ scale: 0.5, opacity: 0, y: -50 }}
-      whileHover={isPlayable ? { y: extraY - 25, scale: 1.05, zIndex: 100 } : {}}
-      onClick={isPlayable ? onClick : undefined}
-      style={{ 
-        marginLeft: useNegativeMargin ? (index === 0 ? 0 : '-3.5rem') : undefined,
-        zIndex: index 
-      }}
-      className={`relative w-24 h-36 sm:w-28 sm:h-40 bg-[#f9f5eb] rounded-lg card-shadow flex flex-col items-center justify-between p-2 cursor-pointer transition-shadow duration-200 border-2 ${
-        isPlayable ? 'border-[#d4ad60] ring-2 ring-[#d4ad60]/50' : 'border-[#d4ad60]/30'
-      } ${!isFaceUp ? 'bg-[#a64b2a]' : ''} ${className}`}
-    >
-      {!isFaceUp ? (
-        <div className="w-full h-full border-2 border-[#d4ad60] rounded-md flex items-center justify-center relative overflow-hidden">
-          {/* Decorative pattern for card back */}
-          <div className="absolute inset-0 opacity-20" style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 0l5 15h15l-12 9 5 16-13-10-13 10 5-16-12-9h15z' fill='%23d4ad60' fill-opacity='1' fill-rule='evenodd'/%3E%3C/svg%3E")`,
-            backgroundSize: '20px 20px'
-          }} />
-          <div className="w-16 h-16 border-2 border-[#d4ad60] rounded-full flex items-center justify-center bg-[#a64b2a] z-10 shadow-lg overflow-hidden p-1">
-            <img 
-              src="https://images.unsplash.com/photo-1582555172866-f73bb12a2ab3?auto=format&fit=crop&q=80&w=200" 
-              alt="敦煌壁画" 
-              className="w-full h-full object-cover rounded-full opacity-90 sepia-[0.3] contrast-[1.1]"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="absolute inset-1 border border-[#d4ad60]/10 pointer-events-none rounded-sm" />
-          <div className={`self-start text-lg font-bold leading-none ${getSuitColor(card.suit)} flex flex-col items-center`}>
-            <div className="font-display">{card.rank}</div>
-            <div className="text-sm">{getSuitSymbol(card.suit)}</div>
-          </div>
-          <div className={`text-5xl opacity-80 ${getSuitColor(card.suit)}`}>
-            {getSuitSymbol(card.suit)}
-          </div>
-          <div className={`self-end text-lg font-bold leading-none rotate-180 ${getSuitColor(card.suit)} flex flex-col items-center`}>
-            <div className="font-display">{card.rank}</div>
-            <div className="text-sm">{getSuitSymbol(card.suit)}</div>
-          </div>
-        </>
-      )}
-    </motion.div>
-  );
-};
+const CATEGORIES: Category[] = ['定语从句', '状语从句', '非谓语动词', '名词性从句', '连词', '独立主格'];
+const DIFFICULTIES: Difficulty[] = ['初级', '中级', '高级'];
 
 export default function App() {
-  const [deck, setDeck] = useState<CardData[]>([]);
-  const [discardPile, setDiscardPile] = useState<CardData[]>([]);
-  const [playerHand, setPlayerHand] = useState<CardData[]>([]);
-  const [aiHand, setAiHand] = useState<CardData[]>([]);
-  const [currentTurn, setCurrentTurn] = useState<Turn>('player');
-  const [status, setStatus] = useState<GameStatus>('waiting');
-  const [wildSuit, setWildSuit] = useState<Suit | null>(null);
-  const [message, setMessage] = useState("欢迎来到 Tina 的疯狂 8 点！");
-  const [showSuitPicker, setShowSuitPicker] = useState(false);
-  const [pending8Card, setPending8Card] = useState<CardData | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [score, setScore] = useState(0);
+  const [showResult, setShowResult] = useState(false);
+  const [filterDifficulty, setFilterDifficulty] = useState<Difficulty | '全部'>('全部');
+  const [filterCategory, setFilterCategory] = useState<Category | '全部'>('全部');
+  const [history, setHistory] = useState<{ questionId: string; isCorrect: boolean }[]>([]);
 
-  const startNewGame = useCallback(() => {
-    const newDeck = createDeck();
-    const pHand = newDeck.splice(0, 8);
-    const aHand = newDeck.splice(0, 8);
-    
-    // Ensure first discard is not an 8 for simplicity
-    let firstDiscardIndex = 0;
-    while (newDeck[firstDiscardIndex].rank === '8') {
-      firstDiscardIndex++;
-    }
-    const firstDiscard = newDeck.splice(firstDiscardIndex, 1)[0];
-
-    setDeck(newDeck);
-    setPlayerHand(pHand);
-    setAiHand(aHand);
-    setDiscardPile([firstDiscard]);
-    setCurrentTurn('player');
-    setStatus('playing');
-    setWildSuit(null);
-    setMessage("轮到你了！请匹配花色或点数。");
-  }, []);
-
-  useEffect(() => {
-    if (status === 'waiting') {
-      startNewGame();
-    }
-  }, [status, startNewGame]);
-
-  const checkWin = useCallback(() => {
-    if (playerHand.length === 0) {
-      setStatus('won');
-      setMessage("恭喜！你赢了！");
-      return true;
-    }
-    if (aiHand.length === 0) {
-      setStatus('lost');
-      setMessage("AI 赢了！下次好运。");
-      return true;
-    }
-    return false;
-  }, [playerHand.length, aiHand.length]);
-
-  const handleDraw = () => {
-    if (currentTurn !== 'player' || status !== 'playing') return;
-
-    if (deck.length === 0) {
-      setMessage("牌堆已空！跳过回合。");
-      setCurrentTurn('ai');
-      return;
-    }
-
-    const newDeck = [...deck];
-    const drawnCard = newDeck.pop()!;
-    setDeck(newDeck);
-    setPlayerHand(prev => [...prev, drawnCard]);
-    setMessage("你摸了一张牌。");
-    
-    // In Crazy 8s, usually drawing ends your turn if you can't play it, 
-    // but some rules allow playing immediately. Let's stick to simple: draw and check.
-    // If the drawn card is playable, we could let them play it, but for simplicity, 
-    // let's just keep it their turn until they play or we decide to end it.
-    // Standard rule: if you draw and can't play, turn ends.
-    if (!canPlayCard(drawnCard, discardPile[discardPile.length - 1], wildSuit)) {
-      setTimeout(() => setCurrentTurn('ai'), 1000);
-    }
-  };
-
-  const playCard = (card: CardData, isPlayer: boolean) => {
-    if (status !== 'playing') return;
-
-    if (card.rank === '8') {
-      if (isPlayer) {
-        setPending8Card(card);
-        setShowSuitPicker(true);
-      } else {
-        // AI logic for 8
-        const topCard = discardPile[discardPile.length - 1];
-        const mostCommonSuit = getAiBestSuit();
-        executePlay(card, isPlayer, mostCommonSuit);
-      }
-    } else {
-      executePlay(card, isPlayer, null);
-    }
-  };
-
-  const executePlay = (card: CardData, isPlayer: boolean, chosenSuit: Suit | null) => {
-    if (isPlayer) {
-      setPlayerHand(prev => prev.filter(c => c.id !== card.id));
-      setCurrentTurn('ai');
-    } else {
-      setAiHand(prev => prev.filter(c => c.id !== card.id));
-      setCurrentTurn('player');
-    }
-
-    setDiscardPile(prev => [...prev, card]);
-    setWildSuit(chosenSuit);
-    
-    const suitNames: Record<Suit, string> = { hearts: '红心', diamonds: '方块', clubs: '梅花', spades: '黑桃' };
-
-    if (card.rank === '8') {
-      setMessage(`${isPlayer ? '你' : 'AI'} 打出了 8 并选择了 ${chosenSuit ? suitNames[chosenSuit] : ''}！`);
-    } else {
-      setMessage(`${isPlayer ? '你' : 'AI'} 打出了 ${suitNames[card.suit]} ${card.rank}。`);
-    }
-
-    // Check win condition after state updates
-    setTimeout(() => {
-      if (!checkWin()) {
-        // If it was player's turn, AI will move next via useEffect
-      }
-    }, 100);
-  };
-
-  const getAiBestSuit = (): Suit => {
-    const counts: Record<Suit, number> = { hearts: 0, diamonds: 0, clubs: 0, spades: 0 };
-    aiHand.forEach(c => counts[c.suit]++);
-    let bestSuit: Suit = 'hearts';
-    let maxCount = -1;
-    SUITS.forEach(s => {
-      if (counts[s] > maxCount) {
-        maxCount = counts[s];
-        bestSuit = s;
-      }
+  const filteredQuestions = useMemo(() => {
+    return QUESTIONS.filter(q => {
+      const matchDifficulty = filterDifficulty === '全部' || q.difficulty === filterDifficulty;
+      const matchCategory = filterCategory === '全部' || q.category === filterCategory;
+      return matchDifficulty && matchCategory;
     });
-    return bestSuit;
+  }, [filterDifficulty, filterCategory]);
+
+  const currentQuestion = filteredQuestions[currentQuestionIndex];
+
+  const handleOptionSelect = (option: string) => {
+    if (isSubmitted) return;
+    setSelectedOption(option);
   };
 
-  // AI Turn Logic
-  useEffect(() => {
-    if (currentTurn === 'ai' && status === 'playing') {
-      const timer = setTimeout(() => {
-        const topCard = discardPile[discardPile.length - 1];
-        const playableCards = aiHand.filter(c => canPlayCard(c, topCard, wildSuit));
-
-        if (playableCards.length > 0) {
-          // AI Strategy: Play non-8s first, then 8s
-          const non8s = playableCards.filter(c => c.rank !== '8');
-          const cardToPlay = non8s.length > 0 ? non8s[Math.floor(Math.random() * non8s.length)] : playableCards[0];
-          playCard(cardToPlay, false);
-        } else {
-          // AI must draw
-          if (deck.length > 0) {
-            const newDeck = [...deck];
-            const drawnCard = newDeck.pop()!;
-            setDeck(newDeck);
-            setAiHand(prev => [...prev, drawnCard]);
-            setMessage("AI drew a card.");
-            
-            if (canPlayCard(drawnCard, topCard, wildSuit)) {
-              setTimeout(() => playCard(drawnCard, false), 1000);
-            } else {
-              setCurrentTurn('player');
-              setMessage("AI 无法出牌。轮到你了！");
-            }
-          } else {
-            setMessage("AI 跳过回合（无牌可摸）。");
-            setCurrentTurn('player');
-          }
-        }
-      }, 1500);
-      return () => clearTimeout(timer);
+  const handleSubmit = () => {
+    if (!selectedOption || isSubmitted) return;
+    
+    const isCorrect = selectedOption === currentQuestion.correctAnswer;
+    if (isCorrect) {
+      setScore(prev => prev + 1);
     }
-  }, [currentTurn, status, aiHand, discardPile, wildSuit, deck]);
+    
+    setHistory(prev => [...prev, { questionId: currentQuestion.id, isCorrect }]);
+    setIsSubmitted(true);
+  };
 
-  const topCard = discardPile[discardPile.length - 1];
+  const handleNext = () => {
+    if (currentQuestionIndex < filteredQuestions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setSelectedOption(null);
+      setIsSubmitted(false);
+    } else {
+      setShowResult(true);
+    }
+  };
 
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-between p-4 sm:p-8 font-sans">
-      {/* Header */}
-      <div className="w-full max-w-4xl flex items-center justify-between bg-[#a64b2a]/20 backdrop-blur-md p-4 rounded-2xl border border-[#d4ad60]/30 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#d4ad60] rounded-full flex items-center justify-center font-display text-[#2d1b0d] text-2xl shadow-md">八</div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-widest font-display text-[#d4ad60]">敦煌遗风 · 疯狂八点</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex flex-col items-end">
-            <span className="text-[10px] uppercase opacity-60 font-bold tracking-[0.2em] text-[#d4ad60]">当前局势</span>
-            <span className="text-sm text-[#f9f5eb] font-medium">{message}</span>
-          </div>
+  const resetGame = () => {
+    setCurrentQuestionIndex(0);
+    setSelectedOption(null);
+    setIsSubmitted(false);
+    setScore(0);
+    setShowResult(false);
+    setHistory([]);
+  };
+
+  const renderSentence = (sentence: string, selected: string | null) => {
+    const parts = sentence.split('______');
+    return (
+      <div className="text-2xl md:text-3xl font-serif leading-relaxed text-zinc-800">
+        {parts[0]}
+        <span className={`inline-block min-w-[120px] border-b-2 mx-2 text-center transition-all duration-300 ${
+          isSubmitted 
+            ? selected === currentQuestion.correctAnswer 
+              ? 'text-emerald-600 border-emerald-600' 
+              : 'text-rose-600 border-rose-600'
+            : 'text-indigo-600 border-indigo-300'
+        }`}>
+          {selected || '______'}
+        </span>
+        {parts[1]}
+      </div>
+    );
+  };
+
+  if (filteredQuestions.length === 0) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white p-10 rounded-3xl shadow-sm border border-stone-200 max-w-md">
+          <Filter className="w-12 h-12 text-stone-300 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-stone-800 mb-2">未找到匹配题目</h2>
+          <p className="text-stone-500 mb-6">尝试调整筛选条件以继续练习。</p>
           <button 
-            onClick={startNewGame}
-            className="p-2 hover:bg-[#d4ad60]/20 rounded-full transition-colors text-[#d4ad60]"
-            title="重新开始"
+            onClick={() => { setFilterDifficulty('全部'); setFilterCategory('全部'); }}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
           >
-            <RotateCcw className="w-6 h-6" />
+            重置筛选
           </button>
         </div>
       </div>
+    );
+  }
 
-      {/* Game Board */}
-      <div className="flex-1 w-full max-w-6xl grid grid-rows-[auto_1fr_auto] gap-8 py-8 relative">
-        
-        {/* AI Hand */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2 px-4 py-1 bg-[#a64b2a]/30 border border-[#d4ad60]/20 rounded-full text-xs font-bold tracking-widest text-[#d4ad60]">
-            <Hand className="w-3 h-3" />
-            <span>漠上行者 (AI) - {aiHand.length} 张</span>
+  return (
+    <div className="min-h-screen bg-[#FDFCFB] text-zinc-900 font-sans selection:bg-indigo-100">
+      {/* Header */}
+      <header className="max-w-5xl mx-auto px-6 py-8 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+            <GraduationCap className="w-6 h-6" />
           </div>
-          <div className="flex justify-center -space-x-12 sm:-space-x-16 overflow-visible h-44 items-center">
-            {aiHand.map((card, idx) => (
-              <Card key={card.id} card={card} isFaceUp={false} className="scale-90 opacity-90" index={idx} />
-            ))}
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">英语语法通</h1>
+            <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Grammar Master</p>
           </div>
         </div>
 
-        {/* Center: Deck & Discard */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-16">
-          {/* Draw Pile */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="relative group" onClick={handleDraw}>
-              <div className="absolute -inset-1 bg-[#d4ad60]/20 rounded-lg blur opacity-0 group-hover:opacity-100 transition duration-500"></div>
-              <div className={`relative w-24 h-36 sm:w-28 sm:h-40 bg-[#a64b2a] rounded-lg border-2 border-[#d4ad60] flex items-center justify-center cursor-pointer transform transition-transform hover:scale-105 active:scale-95 shadow-xl ${deck.length === 0 ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="absolute inset-2 border border-[#d4ad60]/30 rounded-sm" />
-                <div className="text-[#d4ad60] font-display text-3xl z-10">{deck.length}</div>
-              </div>
-            </div>
-            <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-[#d4ad60]/60">摸牌堆</span>
-          </div>
-
-          {/* Discard Pile */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="relative">
-              <AnimatePresence mode="popLayout">
-                {discardPile.slice(-1).map((card) => (
-                  <Card key={card.id} card={card} className="relative z-10" />
-                ))}
-              </AnimatePresence>
-              {discardPile.length > 1 && (
-                <div className="absolute top-1 left-1 w-24 h-36 sm:w-28 sm:h-40 bg-[#f9f5eb]/10 rounded-lg border border-[#d4ad60]/20 -z-10 rotate-3"></div>
-              )}
-            </div>
+        <div className="hidden md:flex items-center gap-6">
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">当前进度</span>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-[#d4ad60]/60">弃牌堆</span>
-              {wildSuit && (
-                <div className={`px-2 py-0.5 rounded bg-[#d4ad60]/20 border border-[#d4ad60]/30 text-[10px] font-bold ${getSuitColor(wildSuit)}`}>
-                  变色: {getSuitSymbol(wildSuit)}
-                </div>
-              )}
+              <span className="font-mono font-bold text-lg">{currentQuestionIndex + 1}</span>
+              <span className="text-zinc-300">/</span>
+              <span className="text-zinc-400 font-mono">{filteredQuestions.length}</span>
             </div>
+          </div>
+          <div className="h-8 w-px bg-zinc-200"></div>
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">得分</span>
+            <span className="font-mono font-bold text-lg text-emerald-600">{score}</span>
           </div>
         </div>
+      </header>
 
-        {/* Player Hand */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-2 px-6 py-1.5 rounded-full text-xs font-bold tracking-[0.2em] transition-all shadow-md ${currentTurn === 'player' ? 'bg-[#d4ad60] text-[#2d1b0d]' : 'bg-[#a64b2a]/30 text-[#d4ad60]'}`}>
-              <Hand className="w-3 h-3" />
-              <span>你的手牌 ({playerHand.length})</span>
-            </div>
-            {currentTurn === 'player' && status === 'playing' && (
-              <motion.div 
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="text-[#d4ad60] text-xs font-bold flex items-center gap-1 italic"
-              >
-                <Info className="w-3 h-3" />
-                请出牌...
-              </motion.div>
-            )}
-          </div>
-          <div className="w-full overflow-x-auto pb-12 pt-8 hand-scroll">
-            <div className="flex px-12 items-center justify-center min-w-max min-h-[200px] mx-auto">
-              {playerHand.map((card, index) => {
-                const total = playerHand.length;
-                const mid = (total - 1) / 2;
-                const offset = index - mid;
-                // Calculate rotation and Y translation for fan effect
-                const rotation = total > 1 ? offset * (40 / Math.max(total, 5)) : 0;
-                const translateY = total > 1 ? Math.abs(offset) * (20 / Math.max(total, 5)) : 0;
-                
-                return (
-                  <Card 
-                    key={card.id} 
-                    card={card} 
-                    isPlayable={currentTurn === 'player' && status === 'playing' && canPlayCard(card, topCard, wildSuit)}
-                    onClick={() => playCard(card, true)}
-                    rotate={rotation}
-                    extraY={translateY}
-                    index={index}
-                    useNegativeMargin={true}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Suit Picker Modal */}
-      <AnimatePresence>
-        {showSuitPicker && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#2d1b0d]/80 backdrop-blur-sm p-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-[#2d1b0d] border-2 border-[#d4ad60] p-8 rounded-3xl max-w-md w-full text-center shadow-2xl relative"
+      <main className="max-w-5xl mx-auto px-6 pb-20">
+        <AnimatePresence mode="wait">
+          {!showResult ? (
+            <motion.div
+              key="quiz"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-8"
             >
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#d4ad60] text-[#2d1b0d] px-6 py-1 rounded-full font-display text-xl shadow-lg">
-                神笔点睛
+              {/* Left Column: Question */}
+              <div className="lg:col-span-8 space-y-6">
+                {/* Filters (Mobile) */}
+                <div className="lg:hidden flex flex-wrap gap-2 mb-4">
+                  <select 
+                    value={filterDifficulty} 
+                    onChange={(e) => setFilterDifficulty(e.target.value as any)}
+                    className="bg-white border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium"
+                  >
+                    <option value="全部">所有难度</option>
+                    {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <select 
+                    value={filterCategory} 
+                    onChange={(e) => setFilterCategory(e.target.value as any)}
+                    className="bg-white border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-medium"
+                  >
+                    <option value="全部">所有分类</option>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-sm border border-zinc-100 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-violet-500"></div>
+                  
+                  <div className="flex items-center gap-3 mb-8">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      currentQuestion.difficulty === '初级' ? 'bg-emerald-50 text-emerald-600' :
+                      currentQuestion.difficulty === '中级' ? 'bg-amber-50 text-amber-600' :
+                      'bg-rose-50 text-rose-600'
+                    }`}>
+                      {currentQuestion.difficulty}
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-zinc-100 text-zinc-500 text-[10px] font-bold uppercase tracking-wider">
+                      {currentQuestion.category}
+                    </span>
+                  </div>
+
+                  <div className="mb-12">
+                    {renderSentence(currentQuestion.sentence, selectedOption)}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {currentQuestion.options.map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => handleOptionSelect(option)}
+                        disabled={isSubmitted}
+                        className={`group relative py-5 px-6 rounded-2xl border-2 text-left transition-all duration-200 ${
+                          selectedOption === option
+                            ? isSubmitted
+                              ? option === currentQuestion.correctAnswer
+                                ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                                : 'bg-rose-50 border-rose-500 text-rose-700'
+                              : 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                            : isSubmitted && option === currentQuestion.correctAnswer
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : 'bg-white border-zinc-100 hover:border-zinc-300 text-zinc-600'
+                        }`}
+                      >
+                        <span className="text-lg font-medium">{option}</span>
+                        {isSubmitted && option === currentQuestion.correctAnswer && (
+                          <CheckCircle2 className="absolute right-6 top-1/2 -translate-y-1/2 w-6 h-6 text-emerald-500" />
+                        )}
+                        {isSubmitted && selectedOption === option && option !== currentQuestion.correctAnswer && (
+                          <XCircle className="absolute right-6 top-1/2 -translate-y-1/2 w-6 h-6 text-rose-500" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-10 flex items-center justify-between">
+                    <div className="text-zinc-400 text-sm italic">
+                      {!selectedOption ? '请选择一个选项' : isSubmitted ? '查看右侧解析' : '点击提交检查答案'}
+                    </div>
+                    {!isSubmitted ? (
+                      <button
+                        onClick={handleSubmit}
+                        disabled={!selectedOption}
+                        className={`px-8 py-4 rounded-2xl font-bold transition-all shadow-lg ${
+                          selectedOption 
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200' 
+                            : 'bg-zinc-100 text-zinc-400 cursor-not-allowed shadow-none'
+                        }`}
+                      >
+                        提交答案
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleNext}
+                        className="px-8 py-4 bg-zinc-900 text-white rounded-2xl font-bold hover:bg-zinc-800 transition-all shadow-lg flex items-center gap-2"
+                      >
+                        {currentQuestionIndex === filteredQuestions.length - 1 ? '完成练习' : '下一题'}
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-              <h2 className="text-2xl font-display text-[#d4ad60] mb-2 mt-4">请择灵色</h2>
-              <p className="text-[#f9f5eb]/60 mb-8 text-sm">你打出了万能八点！请选择接下来的花色。</p>
-              <div className="grid grid-cols-2 gap-4">
-                {SUITS.map(suit => {
-                  const suitNames: Record<Suit, string> = { hearts: '朱砂红', diamonds: '赭石黄', clubs: '石绿', spades: '石青' };
-                  return (
-                    <button
-                      key={suit}
-                      onClick={() => {
-                        if (pending8Card) {
-                          executePlay(pending8Card, true, suit);
-                          setShowSuitPicker(false);
-                          setPending8Card(null);
-                        }
-                      }}
-                      className="flex flex-col items-center justify-center p-6 bg-[#f9f5eb]/5 hover:bg-[#d4ad60]/10 rounded-2xl border border-[#d4ad60]/20 transition-all group"
+
+              {/* Right Column: Explanation & Filters */}
+              <div className="lg:col-span-4 space-y-6">
+                {/* Explanation Card */}
+                <AnimatePresence>
+                  {isSubmitted && (
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="bg-white rounded-[2rem] p-8 shadow-sm border border-zinc-100"
                     >
-                      <span className={`text-4xl mb-2 group-hover:scale-125 transition-transform ${getSuitColor(suit)}`}>
-                        {getSuitSymbol(suit)}
-                      </span>
-                      <span className="text-xs font-bold tracking-widest text-[#f9f5eb]/80">{suitNames[suit]}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                      <div className="flex items-center gap-2 mb-6 text-indigo-600">
+                        <Info className="w-5 h-5" />
+                        <h3 className="font-bold uppercase tracking-wider text-xs">详解卡片</h3>
+                      </div>
 
-      {/* Win/Loss Modal */}
-      <AnimatePresence>
-        {(status === 'won' || status === 'lost') && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#2d1b0d]/90 backdrop-blur-md p-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.8, y: 50 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-[#2d1b0d] border-2 border-[#d4ad60] p-12 rounded-[2.5rem] max-w-lg w-full text-center shadow-2xl relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-[#a64b2a] via-[#d4ad60] to-[#a64b2a]"></div>
-              <div className="mb-6 flex justify-center">
-                <div className={`w-24 h-24 rounded-full flex items-center justify-center border-2 border-[#d4ad60] ${status === 'won' ? 'bg-[#d4ad60]/20 text-[#d4ad60]' : 'bg-[#a64b2a]/20 text-[#a64b2a]'}`}>
-                  {status === 'won' ? <Trophy className="w-12 h-12" /> : <RotateCcw className="w-12 h-12" />}
+                      <div className="space-y-6">
+                        <div>
+                          <h4 className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest mb-2">语法规则</h4>
+                          <p className="text-sm text-zinc-700 leading-relaxed">{currentQuestion.explanation.rule}</p>
+                        </div>
+                        
+                        <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
+                          <h4 className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest mb-2">经典例句</h4>
+                          <p className="text-sm italic text-zinc-800 font-serif">"{currentQuestion.explanation.example}"</p>
+                        </div>
+
+                        <div>
+                          <h4 className="text-[10px] uppercase font-bold text-rose-400 tracking-widest mb-2">常见错误辨析</h4>
+                          <p className="text-sm text-zinc-600 leading-relaxed">{currentQuestion.explanation.commonMistake}</p>
+                        </div>
+
+                        <div className="pt-4 border-t border-zinc-100">
+                          <a 
+                            href="#" 
+                            className="text-xs text-indigo-600 font-bold flex items-center gap-1 hover:underline"
+                          >
+                            复习相关语法点 <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Filters (Desktop) */}
+                <div className="hidden lg:block bg-zinc-50 rounded-[2rem] p-8 border border-zinc-100">
+                  <div className="flex items-center gap-2 mb-6 text-zinc-400">
+                    <Filter className="w-4 h-4" />
+                    <h3 className="font-bold uppercase tracking-wider text-[10px]">题库筛选</h3>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-3">难度</label>
+                      <div className="flex flex-wrap gap-2">
+                        <button 
+                          onClick={() => setFilterDifficulty('全部')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterDifficulty === '全部' ? 'bg-indigo-600 text-white' : 'bg-white text-zinc-600 border border-zinc-200'}`}
+                        >
+                          全部
+                        </button>
+                        {DIFFICULTIES.map(d => (
+                          <button 
+                            key={d}
+                            onClick={() => setFilterDifficulty(d)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterDifficulty === d ? 'bg-indigo-600 text-white' : 'bg-white text-zinc-600 border border-zinc-200'}`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-zinc-500 mb-3">分类</label>
+                      <div className="flex flex-wrap gap-2">
+                        <button 
+                          onClick={() => setFilterCategory('全部')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterCategory === '全部' ? 'bg-indigo-600 text-white' : 'bg-white text-zinc-600 border border-zinc-200'}`}
+                        >
+                          全部
+                        </button>
+                        {CATEGORIES.map(c => (
+                          <button 
+                            key={c}
+                            onClick={() => setFilterCategory(c)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filterCategory === c ? 'bg-indigo-600 text-white' : 'bg-white text-zinc-600 border border-zinc-200'}`}
+                          >
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <h2 className="text-4xl font-display text-[#d4ad60] mb-4 tracking-widest">
-                {status === 'won' ? '功德圆满' : '缘尽于此'}
-              </h2>
-              <p className="text-lg text-[#f9f5eb]/70 mb-10 leading-relaxed">
-                {status === 'won' 
-                  ? "你已清空手中尘埃，在漠上博弈中胜出。善哉！" 
-                  : "漠上行者棋高一着，此番博弈暂且告一段落。"}
-              </p>
-              <button
-                onClick={startNewGame}
-                className="w-full py-5 bg-[#d4ad60] text-[#2d1b0d] font-bold rounded-2xl text-lg hover:bg-[#f9f5eb] transition-all shadow-xl flex items-center justify-center gap-3"
-              >
-                <RotateCcw className="w-6 h-6" />
-                重启博弈
-              </button>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ) : (
+            <motion.div
+              key="result"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-2xl mx-auto bg-white rounded-[3rem] p-12 text-center shadow-xl border border-zinc-100 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-500"></div>
+              
+              <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 mx-auto mb-8">
+                <Trophy className="w-12 h-12" />
+              </div>
 
-      {/* Footer Info */}
-      <div className="w-full max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-4 opacity-40 text-[10px] uppercase font-bold tracking-[0.2em] mt-8 text-[#d4ad60]">
-        <div className="flex items-center gap-4">
-          <span>敦煌壁画风格 · 矿物颜料色系</span>
-          <span className="w-1 h-1 bg-[#d4ad60] rounded-full"></span>
-          <span>万能八点：神笔点睛</span>
-        </div>
-        <div>© 2026 敦煌遗风 · 疯狂八点</div>
-      </div>
+              <h2 className="text-4xl font-bold mb-2">练习完成!</h2>
+              <p className="text-zinc-400 mb-10">你做得非常棒，继续保持！</p>
+
+              <div className="grid grid-cols-2 gap-6 mb-12">
+                <div className="bg-zinc-50 p-8 rounded-3xl border border-zinc-100">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest block mb-1">最终得分</span>
+                  <span className="text-4xl font-mono font-bold text-indigo-600">{score} <span className="text-zinc-300 text-xl">/ {filteredQuestions.length}</span></span>
+                </div>
+                <div className="bg-zinc-50 p-8 rounded-3xl border border-zinc-100">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest block mb-1">正确率</span>
+                  <span className="text-4xl font-mono font-bold text-emerald-600">{Math.round((score / filteredQuestions.length) * 100)}%</span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <button 
+                  onClick={resetGame}
+                  className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-3"
+                >
+                  <RotateCcw className="w-5 h-5" />
+                  再练一次
+                </button>
+                <button 
+                  onClick={() => { setFilterDifficulty('全部'); setFilterCategory('全部'); resetGame(); }}
+                  className="w-full py-5 bg-white text-zinc-600 border border-zinc-200 rounded-2xl font-bold hover:bg-zinc-50 transition-all"
+                >
+                  尝试其他分类
+                </button>
+              </div>
+
+              <div className="mt-12 pt-8 border-t border-zinc-100">
+                <p className="text-sm text-zinc-400 italic">
+                  "Success is the sum of small efforts, repeated day in and day out."
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
     </div>
   );
 }

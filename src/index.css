@@ -1,57 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Noto Serif SC", ui-serif, Georgia, serif;
-  --font-display: "Ma Shan Zheng", cursive;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-body {
-  background-color: #2d1b0d; /* Deep earth brown */
-  background-image: 
-    radial-gradient(circle at 50% 50%, rgba(166, 75, 42, 0.15) 0%, transparent 80%),
-    url("https://www.transparenttextures.com/patterns/paper-fibers.png");
-  color: #f9f5eb;
-  overflow-x: hidden;
-  overflow-y: auto;
-  user-select: none;
-  min-height: 100vh;
+@layer base {
+  body {
+    @apply bg-[#FDFCFB] text-zinc-900 antialiased;
+    min-height: 100vh;
+  }
 }
 
-.card-shadow {
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+.glass {
+  @apply bg-white/70 backdrop-blur-md border border-white/20;
 }
 
-.dunhuang-border {
-  border: 2px solid #d4ad60;
-  position: relative;
+/* Custom transitions */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
 }
-
-.dunhuang-border::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border: 1px solid rgba(212, 173, 96, 0.3);
-  pointer-events: none;
-}
-
-/* Custom scrollbar for hand */
-.hand-scroll::-webkit-scrollbar {
-  height: 6px;
-}
-.hand-scroll::-webkit-scrollbar-track {
-  background: rgba(212, 173, 96, 0.1);
-  border-radius: 10px;
-}
-.hand-scroll::-webkit-scrollbar-thumb {
-  background: #d4ad60;
-  border-radius: 10px;
-}
-
-.text-dunhuang-gold { color: #d4ad60; }
-.bg-dunhuang-gold { background-color: #d4ad60; }
-.border-dunhuang-gold { border-color: #d4ad60; }
-
-.text-dunhuang-red { color: #a64b2a; }
-.text-dunhuang-green { color: #4e6c50; }
-.text-dunhuang-blue { color: #1a374d; }
